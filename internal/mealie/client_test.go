@@ -48,6 +48,49 @@ func TestClientCreatesAndUpdatesRecipe(t *testing.T) {
 	assert.Equal(t, "Test Recipe", updated.Name)
 }
 
+func TestClientFindsRecipeByName(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "/api/recipes", r.URL.Path)
+		assert.Equal(t, "Test Recipe", r.URL.Query().Get("search"))
+		assert.Equal(t, "50", r.URL.Query().Get("perPage"))
+		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+		_, _ = w.Write([]byte(`{
+			"items": [
+				{"name": "Other Recipe", "slug": "other-recipe"},
+				{"name": "test recipe", "slug": "test-recipe"}
+			]
+		}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(server.URL, "test-token")
+	require.NoError(t, err)
+
+	got, ok, err := client.FindRecipeByName(context.Background(), "Test Recipe")
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, "test-recipe", got.Slug)
+}
+
+func TestClientDoesNotFindPartialRecipeName(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"items": [
+				{"name": "Test Recipe Deluxe", "slug": "test-recipe-deluxe"}
+			]
+		}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(server.URL, "test-token")
+	require.NoError(t, err)
+
+	_, ok, err := client.FindRecipeByName(context.Background(), "Test Recipe")
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
 func TestClientUploadsRecipeImage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPut, r.Method)

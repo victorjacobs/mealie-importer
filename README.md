@@ -58,9 +58,12 @@ HEIC/HEIF images are converted to JPEG before upload using `heif-dec`. The Nix-p
 
 For each Mela recipe, the importer:
 
-1. Creates a Mealie recipe with `POST /api/recipes`.
-2. Updates the created recipe with converted fields using `PUT /api/recipes/{slug}`.
-3. Converts HEIC/HEIF images to JPEG when needed.
-4. Uploads the first embedded Mela image with `PUT /api/recipes/{slug}/image`.
+1. Searches Mealie for an existing recipe with the same name.
+2. Creates a Mealie recipe with `POST /api/recipes` only when no exact name match exists.
+3. Updates the existing or created recipe with converted fields using `PUT /api/recipes/{slug}`.
+4. Converts HEIC/HEIF images to JPEG when needed.
+5. Uploads the first embedded Mela image with `PUT /api/recipes/{slug}/image`.
+
+Duplicate detection is based on an exact, case-insensitive recipe name match in Mealie search results.
 
 Mela notes and nutrition text are preserved as Mealie notes. Mela IDs, favorite state, and want-to-cook state are preserved in recipe extras.

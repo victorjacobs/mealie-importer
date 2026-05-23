@@ -52,6 +52,30 @@ func (c *Client) CreateRecipe(ctx context.Context, name string) (string, error) 
 	return slug, nil
 }
 
+func (c *Client) FindRecipeByName(ctx context.Context, name string) (RecipeSummary, bool, error) {
+	endpoint := c.endpoint("/api/recipes")
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return RecipeSummary{}, false, err
+	}
+	query := parsed.Query()
+	query.Set("search", name)
+	query.Set("perPage", "50")
+	parsed.RawQuery = query.Encode()
+
+	var results RecipeSearchResults
+	if err := c.doJSONURL(ctx, http.MethodGet, parsed.String(), nil, &results); err != nil {
+		return RecipeSummary{}, false, err
+	}
+
+	for _, item := range results.Items {
+		if strings.EqualFold(strings.TrimSpace(item.Name), strings.TrimSpace(name)) {
+			return item, true, nil
+		}
+	}
+	return RecipeSummary{}, false, nil
+}
+
 func (c *Client) UpdateRecipe(ctx context.Context, slug string, recipe Recipe) error {
 	return c.doJSON(ctx, http.MethodPut, "/api/recipes/"+url.PathEscape(slug), recipe, nil)
 }
@@ -93,6 +117,10 @@ func (c *Client) UploadRecipeImage(ctx context.Context, slug string, image []byt
 }
 
 func (c *Client) doJSON(ctx context.Context, method, endpoint string, input any, output any) error {
+	return c.doJSONURL(ctx, method, c.endpoint(endpoint), input, output)
+}
+
+func (c *Client) doJSONURL(ctx context.Context, method, url string, input any, output any) error {
 	var body io.Reader
 	if input != nil {
 		data, err := json.Marshal(input)
@@ -102,7 +130,7 @@ func (c *Client) doJSON(ctx context.Context, method, endpoint string, input any,
 		body = bytes.NewReader(data)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.endpoint(endpoint), body)
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return err
 	}

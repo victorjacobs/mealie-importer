@@ -3,13 +3,17 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/victorjacobs/mealie-importer/internal/mealie"
 	"github.com/victorjacobs/mealie-importer/internal/mela"
 )
 
@@ -62,6 +66,70 @@ func TestPrintDryRunIncludesImageUpload(t *testing.T) {
 	assert.Contains(t, string(output), `"imageUpload"`)
 	assert.Contains(t, string(output), `"willUpload": true`)
 	assert.Contains(t, string(output), `"recipe"`)
+}
+
+func TestUpsertRecipeUpdatesExistingRecipe(t *testing.T) {
+	var created bool
+	var updated mealie.Recipe
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/recipes":
+			_, _ = w.Write([]byte(`{"items":[{"name":"Test Recipe","slug":"test-recipe"}]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/recipes":
+			created = true
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`"new-recipe"`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/recipes/test-recipe":
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&updated))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := mealie.NewClient(server.URL, "test-token")
+	require.NoError(t, err)
+
+	slug, wasCreated, err := upsertRecipe(context.Background(), client, mealie.Recipe{Name: "Test Recipe"})
+	require.NoError(t, err)
+	assert.False(t, wasCreated)
+	assert.False(t, created)
+	assert.Equal(t, "test-recipe", slug)
+	assert.Equal(t, "Test Recipe", updated.Name)
+}
+
+func TestUpsertRecipeCreatesMissingRecipe(t *testing.T) {
+	var created mealie.CreateRecipe
+	var updated mealie.Recipe
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/recipes":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/recipes":
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&created))
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`"new-recipe"`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/recipes/new-recipe":
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&updated))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := mealie.NewClient(server.URL, "test-token")
+	require.NoError(t, err)
+
+	slug, wasCreated, err := upsertRecipe(context.Background(), client, mealie.Recipe{Name: "New Recipe"})
+	require.NoError(t, err)
+	assert.True(t, wasCreated)
+	assert.Equal(t, "new-recipe", slug)
+	assert.Equal(t, "New Recipe", created.Name)
+	assert.Equal(t, "New Recipe", updated.Name)
 }
 
 func TestPrepareImageConvertsHEICToJPEG(t *testing.T) {

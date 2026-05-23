@@ -4,6 +4,15 @@ type CreateRecipe struct {
 	Name string `json:"name"`
 }
 
+type RecipeSearchResults struct {
+	Items []RecipeSummary `json:"items"`
+}
+
+type RecipeSummary struct {
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
 type Recipe struct {
 	Name               string             `json:"name,omitempty"`
 	RecipeYield        string             `json:"recipeYield,omitempty"`

@@ -109,14 +109,15 @@ func run(ctx context.Context, cfg config) error {
 
 	for i, recipe := range recipes {
 		converted := importer.Convert(recipe)
-		fmt.Printf("[%d/%d] creating %q\n", i+1, len(recipes), converted.Name)
 
-		slug, err := client.CreateRecipe(ctx, converted.Name)
+		slug, created, err := upsertRecipe(ctx, client, converted)
 		if err != nil {
-			return fmt.Errorf("%s: create recipe: %w", recipe.Path, err)
+			return fmt.Errorf("%s: upsert recipe: %w", recipe.Path, err)
 		}
-		if err := client.UpdateRecipe(ctx, slug, converted); err != nil {
-			return fmt.Errorf("%s: update recipe %q: %w", recipe.Path, slug, err)
+		if created {
+			fmt.Printf("[%d/%d] created %q\n", i+1, len(recipes), converted.Name)
+		} else {
+			fmt.Printf("[%d/%d] updated %q\n", i+1, len(recipes), converted.Name)
 		}
 
 		if cfg.uploadImage {
@@ -133,6 +134,31 @@ func run(ctx context.Context, cfg config) error {
 	}
 
 	return nil
+}
+
+func upsertRecipe(ctx context.Context, client *mealie.Client, recipe mealie.Recipe) (string, bool, error) {
+	existing, found, err := client.FindRecipeByName(ctx, recipe.Name)
+	if err != nil {
+		return "", false, err
+	}
+	if found {
+		if existing.Slug == "" {
+			return "", false, fmt.Errorf("existing recipe %q has no slug", recipe.Name)
+		}
+		if err := client.UpdateRecipe(ctx, existing.Slug, recipe); err != nil {
+			return "", false, err
+		}
+		return existing.Slug, false, nil
+	}
+
+	slug, err := client.CreateRecipe(ctx, recipe.Name)
+	if err != nil {
+		return "", false, err
+	}
+	if err := client.UpdateRecipe(ctx, slug, recipe); err != nil {
+		return "", false, err
+	}
+	return slug, true, nil
 }
 
 func printDryRun(ctx context.Context, recipes []mela.Recipe, uploadImage bool) error {
