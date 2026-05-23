@@ -98,6 +98,7 @@ func TestUpsertRecipeUpdatesExistingRecipe(t *testing.T) {
 	assert.False(t, created)
 	assert.Equal(t, "test-recipe", slug)
 	assert.Equal(t, "Test Recipe", updated.Name)
+	assert.Equal(t, "test-recipe", updated.Slug)
 }
 
 func TestUpsertRecipeCreatesMissingRecipe(t *testing.T) {
@@ -130,6 +131,7 @@ func TestUpsertRecipeCreatesMissingRecipe(t *testing.T) {
 	assert.Equal(t, "new-recipe", slug)
 	assert.Equal(t, "New Recipe", created.Name)
 	assert.Equal(t, "New Recipe", updated.Name)
+	assert.Equal(t, "new-recipe", updated.Slug)
 }
 
 func TestUpsertRecipeUpdatesExistingStubBySlug(t *testing.T) {
@@ -164,6 +166,7 @@ func TestUpsertRecipeUpdatesExistingStubBySlug(t *testing.T) {
 	assert.Equal(t, 0, createAttempts)
 	assert.Equal(t, "test-recipe", slug)
 	assert.Equal(t, "Test Recipe", updated.Name)
+	assert.Equal(t, "test-recipe", updated.Slug)
 }
 
 func TestUpsertRecipeRecoversExistingStubAfterCreateConflict(t *testing.T) {
@@ -205,6 +208,7 @@ func TestUpsertRecipeRecoversExistingStubAfterCreateConflict(t *testing.T) {
 	assert.Equal(t, 2, slugLookups)
 	assert.Equal(t, "test-recipe", slug)
 	assert.Equal(t, "Test Recipe", updated.Name)
+	assert.Equal(t, "test-recipe", updated.Slug)
 }
 
 func TestPrepareImageConvertsHEICToJPEG(t *testing.T) {

@@ -145,7 +145,7 @@ func upsertRecipe(ctx context.Context, client *mealie.Client, recipe mealie.Reci
 		if existing.Slug == "" {
 			return "", false, fmt.Errorf("existing recipe %q has no slug", recipe.Name)
 		}
-		if err := client.UpdateRecipe(ctx, existing.Slug, recipe); err != nil {
+		if err := updateRecipe(ctx, client, existing.Slug, recipe); err != nil {
 			return "", false, err
 		}
 		return existing.Slug, false, nil
@@ -158,7 +158,7 @@ func upsertRecipe(ctx context.Context, client *mealie.Client, recipe mealie.Reci
 		}
 		return "", false, err
 	}
-	if err := client.UpdateRecipe(ctx, slug, recipe); err != nil {
+	if err := updateRecipe(ctx, client, slug, recipe); err != nil {
 		return "", false, fmt.Errorf("update newly created recipe %q: %w", slug, err)
 	}
 	return slug, true, nil
@@ -175,10 +175,15 @@ func updateExistingAfterCreateConflict(ctx context.Context, client *mealie.Clien
 	if existing.Slug == "" {
 		return "", false, fmt.Errorf("existing recipe %q has no slug", recipe.Name)
 	}
-	if err := client.UpdateRecipe(ctx, existing.Slug, recipe); err != nil {
+	if err := updateRecipe(ctx, client, existing.Slug, recipe); err != nil {
 		return "", false, fmt.Errorf("update existing recipe %q after create conflict: %w", existing.Slug, err)
 	}
 	return existing.Slug, false, nil
+}
+
+func updateRecipe(ctx context.Context, client *mealie.Client, slug string, recipe mealie.Recipe) error {
+	recipe.Slug = slug
+	return client.UpdateRecipe(ctx, slug, recipe)
 }
 
 func findExistingRecipe(ctx context.Context, client *mealie.Client, name string) (mealie.RecipeSummary, bool, error) {
