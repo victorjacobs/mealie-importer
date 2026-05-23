@@ -26,7 +26,7 @@
             pname = "mealie-importer";
             version = "0.1.0";
             src = ./.;
-            vendorHash = "sha256-QIFGTWaBRCRItJOXkbXAziBDrVffuX/LEdNUvUQX4QY=";
+            vendorHash = "sha256-0BfipGLNWl/Gy7e2TxU11lU7POTMxFPnRADnb1fgeQs=";
 
             nativeBuildInputs = [
               pkgs.makeWrapper

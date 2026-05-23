@@ -13,6 +13,8 @@ import (
 	"path"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type HTTPError struct {
@@ -39,9 +41,20 @@ type Client struct {
 	baseURL    *url.URL
 	token      string
 	httpClient *http.Client
+	logger     *zap.Logger
 }
 
-func NewClient(baseURL, token string) (*Client, error) {
+type Option func(*Client)
+
+func WithLogger(logger *zap.Logger) Option {
+	return func(c *Client) {
+		if logger != nil {
+			c.logger = logger
+		}
+	}
+}
+
+func NewClient(baseURL, token string, opts ...Option) (*Client, error) {
 	if strings.TrimSpace(baseURL) == "" {
 		return nil, fmt.Errorf("base URL is required")
 	}
@@ -56,20 +69,27 @@ func NewClient(baseURL, token string) (*Client, error) {
 		return nil, fmt.Errorf("token is required")
 	}
 
-	return &Client{
+	client := &Client{
 		baseURL: parsed,
 		token:   token,
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
-	}, nil
+		logger: zap.NewNop(),
+	}
+	for _, opt := range opts {
+		opt(client)
+	}
+	return client, nil
 }
 
 func (c *Client) CreateRecipe(ctx context.Context, name string) (string, error) {
+	c.logger.Debug("creating recipe stub", zap.String("name", name))
 	var slug string
 	if err := c.doJSON(ctx, http.MethodPost, "/api/recipes", CreateRecipe{Name: name}, &slug); err != nil {
 		return "", err
 	}
+	c.logger.Debug("created recipe stub", zap.String("name", name), zap.String("slug", slug))
 	return slug, nil
 }
 
@@ -84,6 +104,7 @@ func (c *Client) FindRecipeByName(ctx context.Context, name string) (RecipeSumma
 	query.Set("perPage", "50")
 	parsed.RawQuery = query.Encode()
 
+	c.logger.Debug("searching recipes by name", zap.String("name", name), zap.String("url", parsed.String()))
 	var results RecipeSearchResults
 	if err := c.doJSONURL(ctx, http.MethodGet, parsed.String(), nil, &results); err != nil {
 		return RecipeSummary{}, false, err
@@ -91,13 +112,16 @@ func (c *Client) FindRecipeByName(ctx context.Context, name string) (RecipeSumma
 
 	for _, item := range results.Items {
 		if strings.EqualFold(strings.TrimSpace(item.Name), strings.TrimSpace(name)) {
+			c.logger.Debug("matched recipe by name", zap.String("name", name), zap.String("matchedName", item.Name), zap.String("slug", item.Slug))
 			return item, true, nil
 		}
 	}
+	c.logger.Debug("no exact recipe name match", zap.String("name", name), zap.Int("resultCount", len(results.Items)))
 	return RecipeSummary{}, false, nil
 }
 
 func (c *Client) FindRecipeBySlug(ctx context.Context, slug string) (RecipeSummary, bool, error) {
+	c.logger.Debug("searching recipe by slug", zap.String("slug", slug))
 	recipe, found, err := c.GetRecipe(ctx, slug)
 	if err != nil || !found {
 		return RecipeSummary{}, false, err
@@ -106,11 +130,13 @@ func (c *Client) FindRecipeBySlug(ctx context.Context, slug string) (RecipeSumma
 }
 
 func (c *Client) GetRecipe(ctx context.Context, slug string) (Recipe, bool, error) {
+	c.logger.Debug("getting recipe", zap.String("slug", slug))
 	var recipe Recipe
 	err := c.doJSON(ctx, http.MethodGet, "/api/recipes/"+url.PathEscape(slug), nil, &recipe)
 	if err != nil {
 		var httpErr *HTTPError
 		if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+			c.logger.Debug("recipe not found", zap.String("slug", slug))
 			return Recipe{}, false, nil
 		}
 		return Recipe{}, false, err
@@ -118,14 +144,17 @@ func (c *Client) GetRecipe(ctx context.Context, slug string) (Recipe, bool, erro
 	if recipe.Slug == "" {
 		recipe.Slug = slug
 	}
+	c.logger.Debug("got recipe", zap.String("slug", slug), zap.String("id", recipe.ID), zap.String("name", recipe.Name), zap.String("recipeSlug", recipe.Slug))
 	return recipe, true, nil
 }
 
 func (c *Client) UpdateRecipe(ctx context.Context, slug string, recipe Recipe) error {
+	c.logger.Debug("updating recipe", zap.String("slug", slug), zap.Any("recipe", recipe))
 	return c.doJSON(ctx, http.MethodPut, "/api/recipes/"+url.PathEscape(slug), recipe, nil)
 }
 
 func (c *Client) UploadRecipeImage(ctx context.Context, slug string, image []byte, extension string) error {
+	c.logger.Debug("uploading recipe image", zap.String("slug", slug), zap.String("extension", extension), zap.Int("bytes", len(image)))
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	part, err := writer.CreateFormFile("image", "image."+extension)
@@ -151,13 +180,17 @@ func (c *Client) UploadRecipeImage(ctx context.Context, slug string, image []byt
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		c.logger.Debug("mealie image request failed", zap.String("method", req.Method), zap.String("url", req.URL.String()), zap.Error(err))
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return responseError(resp)
+		err := responseError(resp)
+		c.logger.Debug("mealie image request returned error", zap.String("method", req.Method), zap.String("url", req.URL.String()), zap.Int("statusCode", resp.StatusCode), zap.Error(err))
+		return err
 	}
+	c.logger.Debug("mealie image request completed", zap.String("method", req.Method), zap.String("url", req.URL.String()), zap.Int("statusCode", resp.StatusCode))
 	return nil
 }
 
@@ -175,6 +208,16 @@ func (c *Client) doJSONURL(ctx context.Context, method, url string, input any, o
 		body = bytes.NewReader(data)
 	}
 
+	start := time.Now()
+	fields := []zap.Field{
+		zap.String("method", method),
+		zap.String("url", url),
+	}
+	if input != nil {
+		fields = append(fields, zap.Any("request", input))
+	}
+	c.logger.Debug("mealie request", fields...)
+
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return err
@@ -187,17 +230,26 @@ func (c *Client) doJSONURL(ctx context.Context, method, url string, input any, o
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		c.logger.Debug("mealie request failed", zap.String("method", method), zap.String("url", url), zap.Duration("duration", time.Since(start)), zap.Error(err))
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return responseError(resp)
+		err := responseError(resp)
+		c.logger.Debug("mealie response error", zap.String("method", method), zap.String("url", url), zap.Int("statusCode", resp.StatusCode), zap.Duration("duration", time.Since(start)), zap.Error(err))
+		return err
 	}
 	if output == nil {
+		c.logger.Debug("mealie response", zap.String("method", method), zap.String("url", url), zap.Int("statusCode", resp.StatusCode), zap.Duration("duration", time.Since(start)))
 		return nil
 	}
-	return json.NewDecoder(resp.Body).Decode(output)
+	if err := json.NewDecoder(resp.Body).Decode(output); err != nil {
+		c.logger.Debug("mealie response decode failed", zap.String("method", method), zap.String("url", url), zap.Int("statusCode", resp.StatusCode), zap.Duration("duration", time.Since(start)), zap.Error(err))
+		return err
+	}
+	c.logger.Debug("mealie response", zap.String("method", method), zap.String("url", url), zap.Int("statusCode", resp.StatusCode), zap.Duration("duration", time.Since(start)), zap.Any("response", output))
+	return nil
 }
 
 func (c *Client) authorize(req *http.Request) {
