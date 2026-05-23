@@ -59,26 +59,15 @@ func newRootCommand() *cobra.Command {
 		Short: "Import a Mela .melarecipes export into Mealie",
 		Long: "Import recipes from a Mela .melarecipes export bundle into Mealie.\n\n" +
 			"The source can also be an extracted directory containing .melarecipe files.",
-		Args: func(cmd *cobra.Command, args []string) error {
-			if cfg.sourceDir == "" && len(args) > 0 {
-				cfg.sourceDir = args[0]
-			}
-			if cfg.sourceDir == "" {
-				return fmt.Errorf("source .melarecipes file or recipe directory is required")
-			}
-			if len(args) > 1 {
-				return fmt.Errorf("expected at most one source .melarecipes file or recipe directory argument")
-			}
-			return nil
-		},
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.sourceDir = args[0]
 			cfg.mealieURL = strings.TrimRight(strings.TrimSpace(cfg.mealieURL), "/")
 			cfg.token = strings.TrimSpace(cfg.token)
 			return run(cmd.Context(), cfg)
 		},
 	}
 
-	cmd.Flags().StringVar(&cfg.sourceDir, "source", "", "Mela .melarecipes export bundle or directory containing .melarecipe files")
 	cmd.Flags().StringVar(&cfg.mealieURL, "mealie-url", cfg.mealieURL, "Mealie base URL, or MEALIE_URL")
 	cmd.Flags().StringVar(&cfg.token, "token", cfg.token, "Mealie API token, or MEALIE_TOKEN")
 	cmd.Flags().BoolVar(&cfg.dryRun, "dry-run", false, "print import preview JSON without sending it")

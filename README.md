@@ -45,7 +45,6 @@ nix build .#mealie-importer
 
 Useful flags:
 
-- `--source`: directory containing `.melarecipe` files, alternative to the positional path
 - `--dry-run`: print import preview JSON, including image upload status, and do not call the API
 - `--limit`: process only the first N recipes
 - `--mealie-url`: Mealie base URL, alternative to `MEALIE_URL`
