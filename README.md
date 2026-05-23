@@ -18,7 +18,7 @@ If direnv is not active in your shell, prefix commands with `nix develop -c`.
 Preview the converted Mealie payloads without importing anything:
 
 ```sh
-go run ./cmd/mealie-importer --dry-run /Users/victor/Downloads/Recipes.melarecipes
+go run . --dry-run /Users/victor/Downloads/Recipes.melarecipes
 ```
 
 Import into Mealie:
@@ -27,7 +27,7 @@ Import into Mealie:
 export MEALIE_URL="https://mealie.example.com"
 export MEALIE_TOKEN="your-api-token"
 
-go run ./cmd/mealie-importer /Users/victor/Downloads/Recipes.melarecipes
+go run . /Users/victor/Downloads/Recipes.melarecipes
 ```
 
 Useful flags:
