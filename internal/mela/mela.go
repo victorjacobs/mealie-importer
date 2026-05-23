@@ -141,5 +141,14 @@ func detectImage(data []byte) (string, string) {
 	if len(data) >= 6 && (string(data[:6]) == "GIF87a" || string(data[:6]) == "GIF89a") {
 		return "image/gif", "gif"
 	}
+	if len(data) >= 12 && string(data[4:8]) == "ftyp" {
+		brand := string(data[8:12])
+		switch brand {
+		case "heic", "heix", "hevc", "hevx", "mif1", "msf1":
+			return "image/heic", "heic"
+		case "heif":
+			return "image/heif", "heif"
+		}
+	}
 	return "application/octet-stream", "bin"
 }

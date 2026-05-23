@@ -15,7 +15,7 @@ If direnv is not active in your shell, prefix commands with `nix develop -c`.
 
 ## Usage
 
-Preview the converted Mealie payloads without importing anything:
+Preview the import plan without importing anything:
 
 ```sh
 go run . --dry-run /Users/victor/Downloads/Recipes.melarecipes
@@ -33,7 +33,7 @@ go run . /Users/victor/Downloads/Recipes.melarecipes
 Useful flags:
 
 - `--source`: directory containing `.melarecipe` files, alternative to the positional path
-- `--dry-run`: print converted Mealie JSON and do not call the API
+- `--dry-run`: print import preview JSON, including image upload status, and do not call the API
 - `--limit`: process only the first N recipes
 - `--mealie-url`: Mealie base URL, alternative to `MEALIE_URL`
 - `--token`: Mealie API token, alternative to `MEALIE_TOKEN`

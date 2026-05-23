@@ -22,6 +22,22 @@ type config struct {
 	limit       int
 }
 
+type dryRunRecipe struct {
+	SourcePath  string        `json:"sourcePath"`
+	ImageUpload imagePreview  `json:"imageUpload"`
+	Recipe      mealie.Recipe `json:"recipe"`
+}
+
+type imagePreview struct {
+	Enabled       bool   `json:"enabled"`
+	WillUpload    bool   `json:"willUpload"`
+	ImageCount    int    `json:"imageCount"`
+	MediaType     string `json:"mediaType,omitempty"`
+	Extension     string `json:"extension,omitempty"`
+	SizeBytes     int    `json:"sizeBytes,omitempty"`
+	SkippedReason string `json:"skippedReason,omitempty"`
+}
+
 func main() {
 	if err := newRootCommand().ExecuteContext(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -61,7 +77,7 @@ func newRootCommand() *cobra.Command {
 	cmd.Flags().StringVar(&cfg.sourceDir, "source", "", "directory containing .melarecipe files")
 	cmd.Flags().StringVar(&cfg.mealieURL, "mealie-url", cfg.mealieURL, "Mealie base URL, or MEALIE_URL")
 	cmd.Flags().StringVar(&cfg.token, "token", cfg.token, "Mealie API token, or MEALIE_TOKEN")
-	cmd.Flags().BoolVar(&cfg.dryRun, "dry-run", false, "print converted Mealie JSON without sending it")
+	cmd.Flags().BoolVar(&cfg.dryRun, "dry-run", false, "print import preview JSON without sending it")
 	cmd.Flags().BoolVar(&cfg.uploadImage, "upload-image", true, "upload the first Mela image after creating each recipe")
 	cmd.Flags().IntVar(&cfg.limit, "limit", 0, "maximum number of recipes to process")
 
@@ -81,7 +97,7 @@ func run(ctx context.Context, cfg config) error {
 	}
 
 	if cfg.dryRun {
-		return printDryRun(recipes)
+		return printDryRun(recipes, cfg.uploadImage)
 	}
 
 	client, err := mealie.NewClient(cfg.mealieURL, cfg.token)
@@ -117,13 +133,47 @@ func run(ctx context.Context, cfg config) error {
 	return nil
 }
 
-func printDryRun(recipes []mela.Recipe) error {
-	output := make([]mealie.Recipe, 0, len(recipes))
+func printDryRun(recipes []mela.Recipe, uploadImage bool) error {
+	output := make([]dryRunRecipe, 0, len(recipes))
 	for _, recipe := range recipes {
-		output = append(output, importer.Convert(recipe))
+		image, err := previewImage(recipe, uploadImage)
+		if err != nil {
+			return err
+		}
+		output = append(output, dryRunRecipe{
+			SourcePath:  recipe.Path,
+			ImageUpload: image,
+			Recipe:      importer.Convert(recipe),
+		})
 	}
 
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(output)
+}
+
+func previewImage(recipe mela.Recipe, uploadImage bool) (imagePreview, error) {
+	preview := imagePreview{
+		Enabled:    uploadImage,
+		ImageCount: len(recipe.Images),
+	}
+	if !uploadImage {
+		preview.SkippedReason = "image upload disabled"
+		return preview, nil
+	}
+
+	image, ok, err := recipe.PrimaryImage()
+	if err != nil {
+		return imagePreview{}, err
+	}
+	if !ok {
+		preview.SkippedReason = "recipe has no image"
+		return preview, nil
+	}
+
+	preview.WillUpload = true
+	preview.MediaType = image.MediaType
+	preview.Extension = image.Extension
+	preview.SizeBytes = len(image.Data)
+	return preview, nil
 }

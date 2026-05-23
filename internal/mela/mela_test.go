@@ -42,3 +42,18 @@ func TestReadDirAndRecipeHelpers(t *testing.T) {
 	assert.Equal(t, "jpg", decoded.Extension)
 	assert.Equal(t, "image/jpeg", decoded.MediaType)
 }
+
+func TestPrimaryImageDetectsHEIC(t *testing.T) {
+	image := base64.StdEncoding.EncodeToString([]byte{
+		0x00, 0x00, 0x00, 0x18,
+		'f', 't', 'y', 'p',
+		'h', 'e', 'i', 'c',
+		0x00, 0x00, 0x00, 0x00,
+	})
+
+	decoded, ok, err := (Recipe{Images: []string{image}}).PrimaryImage()
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, "heic", decoded.Extension)
+	assert.Equal(t, "image/heic", decoded.MediaType)
+}
