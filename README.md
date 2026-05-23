@@ -18,13 +18,13 @@ If direnv is not active in your shell, prefix commands with `nix develop -c`.
 Run the Nix-packaged importer:
 
 ```sh
-nix run . -- --dry-run /Users/victor/Downloads/Recipes.melarecipes
+nix run . -- --dry-run ~/Downloads/Recipes.melarecipes
 ```
 
 Preview the import plan without importing anything:
 
 ```sh
-go run . --dry-run /Users/victor/Downloads/Recipes.melarecipes
+go run . --dry-run ~/Downloads/Recipes.melarecipes
 ```
 
 Import into Mealie:
@@ -33,14 +33,14 @@ Import into Mealie:
 export MEALIE_URL="https://mealie.example.com"
 export MEALIE_TOKEN="your-api-token"
 
-go run . /Users/victor/Downloads/Recipes.melarecipes
+go run . ~/Downloads/Recipes.melarecipes
 ```
 
 Build a wrapped binary:
 
 ```sh
 nix build .#mealie-importer
-./result/bin/mealie-importer --dry-run /Users/victor/Downloads/Recipes.melarecipes
+./result/bin/mealie-importer --dry-run ~/Downloads/Recipes.melarecipes
 ```
 
 Useful flags:
