@@ -1,6 +1,7 @@
 package mela
 
 import (
+	"archive/zip"
 	"encoding/base64"
 	"os"
 	"path/filepath"
@@ -56,4 +57,53 @@ func TestPrimaryImageDetectsHEIC(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "heic", decoded.Extension)
 	assert.Equal(t, "image/heic", decoded.MediaType)
+}
+
+func TestReadSourceReadsMelarecipesZip(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "Recipes.melarecipes")
+	createZip(t, bundle, map[string]string{
+		"Nested/recipe.melarecipe": `{"title":"Bundled Recipe"}`,
+		"ignored.txt":              `{}`,
+	})
+
+	recipes, cleanup, err := ReadSource(bundle)
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+
+	require.Len(t, recipes, 1)
+	assert.Equal(t, "Bundled Recipe", recipes[0].Title)
+	assert.Contains(t, recipes[0].Path, "recipe.melarecipe")
+}
+
+func TestReadSourceRejectsUnsafeZipPath(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "Recipes.melarecipes")
+	createZip(t, bundle, map[string]string{
+		"../recipe.melarecipe": `{"title":"Unsafe Recipe"}`,
+	})
+
+	_, cleanup, err := ReadSource(bundle)
+	if cleanup != nil {
+		t.Cleanup(cleanup)
+	}
+	require.ErrorContains(t, err, "unsafe zip path")
+}
+
+func createZip(t *testing.T, path string, files map[string]string) {
+	t.Helper()
+
+	output, err := os.Create(path)
+	require.NoError(t, err)
+	defer output.Close()
+
+	writer := zip.NewWriter(output)
+	defer writer.Close()
+
+	for name, content := range files {
+		file, err := writer.Create(name)
+		require.NoError(t, err)
+		_, err = file.Write([]byte(content))
+		require.NoError(t, err)
+	}
 }

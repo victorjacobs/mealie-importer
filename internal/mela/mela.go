@@ -1,9 +1,11 @@
 package mela
 
 import (
+	"archive/zip"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -41,6 +43,40 @@ type Image struct {
 	ConvertedFrom string
 }
 
+func ReadSource(path string) ([]Recipe, func(), error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	if info.IsDir() {
+		recipes, err := ReadDir(path)
+		return recipes, func() {}, err
+	}
+	if filepath.Ext(path) != ".melarecipes" {
+		return nil, nil, fmt.Errorf("%s: expected a directory or .melarecipes zip file", path)
+	}
+
+	dir, err := os.MkdirTemp("", "mealie-importer-mela-*")
+	if err != nil {
+		return nil, nil, err
+	}
+	cleanup := func() {
+		_ = os.RemoveAll(dir)
+	}
+
+	if err := unzip(path, dir); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+
+	recipes, err := ReadDir(dir)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	return recipes, cleanup, nil
+}
+
 func ReadFile(path string) (Recipe, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -60,17 +96,19 @@ func ReadFile(path string) (Recipe, error) {
 }
 
 func ReadDir(path string) ([]Recipe, error) {
-	entries, err := os.ReadDir(path)
+	var paths []string
+	err := filepath.WalkDir(path, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".melarecipe" {
+			return nil
+		}
+		paths = append(paths, path)
+		return nil
+	})
 	if err != nil {
 		return nil, err
-	}
-
-	var paths []string
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".melarecipe" {
-			continue
-		}
-		paths = append(paths, filepath.Join(path, entry.Name()))
 	}
 	sort.Strings(paths)
 
@@ -84,6 +122,67 @@ func ReadDir(path string) ([]Recipe, error) {
 	}
 
 	return recipes, nil
+}
+
+func unzip(source, targetDir string) error {
+	reader, err := zip.OpenReader(source)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	for _, file := range reader.File {
+		target, err := safeZipPath(targetDir, file.Name)
+		if err != nil {
+			return err
+		}
+		if file.FileInfo().IsDir() {
+			if err := os.MkdirAll(target, 0o700); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+			return err
+		}
+		if err := extractZipFile(file, target); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func safeZipPath(targetDir, name string) (string, error) {
+	cleanName := filepath.Clean(name)
+	if cleanName == "." || filepath.IsAbs(cleanName) || strings.HasPrefix(cleanName, ".."+string(os.PathSeparator)) || cleanName == ".." {
+		return "", fmt.Errorf("unsafe zip path %q", name)
+	}
+
+	target := filepath.Join(targetDir, cleanName)
+	cleanTargetDir := filepath.Clean(targetDir) + string(os.PathSeparator)
+	cleanTarget := filepath.Clean(target)
+	if !strings.HasPrefix(cleanTarget+string(os.PathSeparator), cleanTargetDir) && cleanTarget != filepath.Clean(targetDir) {
+		return "", fmt.Errorf("unsafe zip path %q", name)
+	}
+	return target, nil
+}
+
+func extractZipFile(file *zip.File, target string) error {
+	source, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+
+	destination, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	defer destination.Close()
+
+	_, err = io.Copy(destination, source)
+	return err
 }
 
 func (r Recipe) DateAdded() string {

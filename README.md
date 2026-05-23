@@ -1,6 +1,6 @@
 # mealie-importer
 
-CLI tool for importing Mela `.melarecipe` exports into a hosted Mealie instance.
+CLI tool for importing Mela `.melarecipes` bundles, or directories of `.melarecipe` files, into a hosted Mealie instance.
 
 ## Environment
 
@@ -51,6 +51,8 @@ Useful flags:
 - `--mealie-url`: Mealie base URL, alternative to `MEALIE_URL`
 - `--token`: Mealie API token, alternative to `MEALIE_TOKEN`
 - `--upload-image=false`: skip primary image upload
+
+The source path can be a Mela `.melarecipes` export bundle, which is a zip file, or a directory containing `.melarecipe` files. Bundles are extracted to a temporary directory during import.
 
 HEIC/HEIF images are converted to JPEG before upload using `heif-dec`. The Nix-packaged binary is wrapped so it can find `heif-dec` at runtime. When using `go run .`, use the direnv/Nix development environment so `heif-dec` is available on `PATH`. The dry-run output reports converted images as `extension: "jpg"` with `convertedFrom: "heic"` or `convertedFrom: "heif"`.
 

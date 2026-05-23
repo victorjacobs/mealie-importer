@@ -87,10 +87,12 @@ func newRootCommand() *cobra.Command {
 }
 
 func run(ctx context.Context, cfg config) error {
-	recipes, err := mela.ReadDir(cfg.sourceDir)
+	recipes, cleanup, err := mela.ReadSource(cfg.sourceDir)
 	if err != nil {
 		return err
 	}
+	defer cleanup()
+
 	if cfg.limit > 0 && cfg.limit < len(recipes) {
 		recipes = recipes[:cfg.limit]
 	}
