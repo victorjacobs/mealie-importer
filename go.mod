@@ -1,4 +1,4 @@
-module github.com/victor/mealie-importer
+module github.com/victorjacobs/mealie-importer
 
 go 1.26.3
 

@@ -4,8 +4,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/victor/mealie-importer/internal/mealie"
-	"github.com/victor/mealie-importer/internal/mela"
+	"github.com/victorjacobs/mealie-importer/internal/mealie"
+	"github.com/victorjacobs/mealie-importer/internal/mela"
 )
 
 var slugCleanup = regexp.MustCompile(`[^a-z0-9]+`)

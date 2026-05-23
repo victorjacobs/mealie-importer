@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/victor/mealie-importer/internal/importer"
-	"github.com/victor/mealie-importer/internal/mealie"
-	"github.com/victor/mealie-importer/internal/mela"
+	"github.com/victorjacobs/mealie-importer/internal/importer"
+	"github.com/victorjacobs/mealie-importer/internal/mealie"
+	"github.com/victorjacobs/mealie-importer/internal/mela"
 )
 
 type config struct {

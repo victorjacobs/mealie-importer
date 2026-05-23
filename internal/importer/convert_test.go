@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/victor/mealie-importer/internal/mela"
+	"github.com/victorjacobs/mealie-importer/internal/mela"
 )
 
 func TestConvert(t *testing.T) {
