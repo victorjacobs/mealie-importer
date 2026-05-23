@@ -17,7 +17,7 @@ func TestReadDirAndRecipeHelpers(t *testing.T) {
 		"title": "Test Recipe",
 		"date": 664544582.919013,
 		"ingredients": "one\n\ntwo\n",
-		"instructions": "step one\n\nstep two",
+		"instructions": "step one\n\nstep two\nstep three",
 		"images": ["` + image + `"]
 	}`
 	if err := os.WriteFile(filepath.Join(dir, "recipe.melarecipe"), []byte(data), 0o600); err != nil {
@@ -34,7 +34,7 @@ func TestReadDirAndRecipeHelpers(t *testing.T) {
 	recipe := recipes[0]
 	assert.Equal(t, "2022-01-22", recipe.DateAdded())
 	assert.Equal(t, []string{"one", "two"}, recipe.IngredientLines())
-	assert.Equal(t, []string{"step one", "step two"}, recipe.InstructionSteps())
+	assert.Equal(t, []string{"step one", "step two", "step three"}, recipe.InstructionSteps())
 
 	decoded, ok, err := recipe.PrimaryImage()
 	require.NoError(t, err)

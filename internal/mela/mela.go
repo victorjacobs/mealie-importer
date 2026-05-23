@@ -98,10 +98,6 @@ func (r Recipe) IngredientLines() []string {
 }
 
 func (r Recipe) InstructionSteps() []string {
-	parts := splitBlocks(r.Instructions)
-	if len(parts) > 0 {
-		return parts
-	}
 	return nonEmptyLines(r.Instructions)
 }
 
@@ -130,19 +126,6 @@ func nonEmptyLines(input string) []string {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			out = append(out, line)
-		}
-	}
-	return out
-}
-
-func splitBlocks(input string) []string {
-	normalized := strings.ReplaceAll(input, "\r\n", "\n")
-	raw := strings.Split(normalized, "\n\n")
-	out := make([]string, 0, len(raw))
-	for _, block := range raw {
-		block = strings.TrimSpace(block)
-		if block != "" {
-			out = append(out, block)
 		}
 	}
 	return out

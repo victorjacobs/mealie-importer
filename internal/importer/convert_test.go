@@ -20,7 +20,7 @@ func TestConvert(t *testing.T) {
 		Date:         664544582.919013,
 		Categories:   []string{"Dinner Ideas"},
 		Ingredients:  "1 tbsp olive oil\n2 onions",
-		Instructions: "Cook onions.\n\nSimmer.",
+		Instructions: "Cook onions.\n\nSimmer.\nServe.",
 		Notes:        "Use good beans.",
 		Nutrition:    "**Calories** 367 kcal",
 		ID:           "example",
@@ -33,7 +33,7 @@ func TestConvert(t *testing.T) {
 	assert.Equal(t, "dinner-ideas", got.RecipeCategory[0].Slug)
 	require.Len(t, got.RecipeIngredient, 2)
 	assert.Equal(t, "1 tbsp olive oil", got.RecipeIngredient[0].OriginalText)
-	require.Len(t, got.RecipeInstructions, 2)
+	require.Len(t, got.RecipeInstructions, 3)
 	assert.Equal(t, "Simmer.", got.RecipeInstructions[1].Text)
 	require.Len(t, got.Notes, 2)
 	assert.Equal(t, true, got.Extras["mela_favorite"])
