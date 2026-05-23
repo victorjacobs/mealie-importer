@@ -41,6 +41,7 @@ func Convert(recipe mela.Recipe) mealie.Recipe {
 	for _, line := range recipe.IngredientLines() {
 		out.RecipeIngredient = append(out.RecipeIngredient, mealie.RecipeIngredient{
 			Display:      line,
+			Note:         line,
 			OriginalText: line,
 		})
 	}

@@ -33,6 +33,7 @@ func TestConvert(t *testing.T) {
 	assert.Equal(t, "dinner-ideas", got.RecipeCategory[0].Slug)
 	require.Len(t, got.RecipeIngredient, 2)
 	assert.Equal(t, "1 tbsp olive oil", got.RecipeIngredient[0].OriginalText)
+	assert.Equal(t, "1 tbsp olive oil", got.RecipeIngredient[0].Note)
 	require.Len(t, got.RecipeInstructions, 3)
 	assert.Equal(t, "Simmer.", got.RecipeInstructions[1].Text)
 	require.Len(t, got.Notes, 2)

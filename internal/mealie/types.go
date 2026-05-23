@@ -42,6 +42,7 @@ type Organizer struct {
 
 type RecipeIngredient struct {
 	Display      string `json:"display,omitempty"`
+	Note         string `json:"note,omitempty"`
 	OriginalText string `json:"originalText,omitempty"`
 }
 
