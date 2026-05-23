@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -13,6 +14,26 @@ import (
 	"strings"
 	"time"
 )
+
+type HTTPError struct {
+	StatusCode int
+	Status     string
+	Body       string
+}
+
+func (e *HTTPError) Error() string {
+	if e.Body == "" {
+		return e.Status
+	}
+	return fmt.Sprintf("%s: %s", e.Status, e.Body)
+}
+
+func IsAlreadyExists(err error) bool {
+	var httpErr *HTTPError
+	return errors.As(err, &httpErr) &&
+		httpErr.StatusCode == http.StatusBadRequest &&
+		strings.Contains(httpErr.Body, "Recipe already exists")
+}
 
 type Client struct {
 	baseURL    *url.URL
@@ -74,6 +95,22 @@ func (c *Client) FindRecipeByName(ctx context.Context, name string) (RecipeSumma
 		}
 	}
 	return RecipeSummary{}, false, nil
+}
+
+func (c *Client) FindRecipeBySlug(ctx context.Context, slug string) (RecipeSummary, bool, error) {
+	var recipe Recipe
+	err := c.doJSON(ctx, http.MethodGet, "/api/recipes/"+url.PathEscape(slug), nil, &recipe)
+	if err != nil {
+		var httpErr *HTTPError
+		if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+			return RecipeSummary{}, false, nil
+		}
+		return RecipeSummary{}, false, err
+	}
+	if recipe.Slug == "" {
+		recipe.Slug = slug
+	}
+	return RecipeSummary{Name: recipe.Name, Slug: recipe.Slug}, true, nil
 }
 
 func (c *Client) UpdateRecipe(ctx context.Context, slug string, recipe Recipe) error {
@@ -168,8 +205,9 @@ func (c *Client) endpoint(endpoint string) string {
 func responseError(resp *http.Response) error {
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	message := strings.TrimSpace(string(data))
-	if message == "" {
-		message = resp.Status
+	return &HTTPError{
+		StatusCode: resp.StatusCode,
+		Status:     resp.Status,
+		Body:       message,
 	}
-	return fmt.Errorf("%s: %s", resp.Status, message)
 }

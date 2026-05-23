@@ -14,6 +14,7 @@ type RecipeSummary struct {
 }
 
 type Recipe struct {
+	Slug               string             `json:"slug,omitempty"`
 	Name               string             `json:"name,omitempty"`
 	RecipeYield        string             `json:"recipeYield,omitempty"`
 	TotalTime          string             `json:"totalTime,omitempty"`

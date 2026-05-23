@@ -132,6 +132,81 @@ func TestUpsertRecipeCreatesMissingRecipe(t *testing.T) {
 	assert.Equal(t, "New Recipe", updated.Name)
 }
 
+func TestUpsertRecipeUpdatesExistingStubBySlug(t *testing.T) {
+	var updated mealie.Recipe
+	var createAttempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/recipes":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/recipes":
+			createAttempts++
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`"new-recipe"`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/recipes/test-recipe":
+			_, _ = w.Write([]byte(`{"name":"Test Recipe","slug":"test-recipe"}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/recipes/test-recipe":
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&updated))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := mealie.NewClient(server.URL, "test-token")
+	require.NoError(t, err)
+
+	slug, wasCreated, err := upsertRecipe(context.Background(), client, mealie.Recipe{Name: "Test Recipe"})
+	require.NoError(t, err)
+	assert.False(t, wasCreated)
+	assert.Equal(t, 0, createAttempts)
+	assert.Equal(t, "test-recipe", slug)
+	assert.Equal(t, "Test Recipe", updated.Name)
+}
+
+func TestUpsertRecipeRecoversExistingStubAfterCreateConflict(t *testing.T) {
+	var updated mealie.Recipe
+	var createAttempts int
+	var slugLookups int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/recipes":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/recipes/test-recipe":
+			slugLookups++
+			if slugLookups == 1 {
+				http.NotFound(w, r)
+				return
+			}
+			_, _ = w.Write([]byte(`{"name":"Test Recipe","slug":"test-recipe"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/recipes":
+			createAttempts++
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"detail":{"message":"Recipe already exists","error":true}}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/recipes/test-recipe":
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&updated))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := mealie.NewClient(server.URL, "test-token")
+	require.NoError(t, err)
+
+	slug, wasCreated, err := upsertRecipe(context.Background(), client, mealie.Recipe{Name: "Test Recipe"})
+	require.NoError(t, err)
+	assert.False(t, wasCreated)
+	assert.Equal(t, 1, createAttempts)
+	assert.Equal(t, 2, slugLookups)
+	assert.Equal(t, "test-recipe", slug)
+	assert.Equal(t, "Test Recipe", updated.Name)
+}
+
 func TestPrepareImageConvertsHEICToJPEG(t *testing.T) {
 	dir := t.TempDir()
 	converter := filepath.Join(dir, "heif-dec")

@@ -64,6 +64,6 @@ For each Mela recipe, the importer:
 4. Converts HEIC/HEIF images to JPEG when needed.
 5. Uploads the first embedded Mela image with `PUT /api/recipes/{slug}/image`.
 
-Duplicate detection is based on an exact, case-insensitive recipe name match in Mealie search results.
+Duplicate detection first uses an exact, case-insensitive recipe name match in Mealie search results. If search misses a recipe that already exists, the importer also checks the expected Mealie slug and can recover an empty stub created by an earlier failed run.
 
 Mela notes and nutrition text are preserved as Mealie notes. Mela IDs, favorite state, and want-to-cook state are preserved in recipe extras.

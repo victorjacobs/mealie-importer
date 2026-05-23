@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -13,6 +14,8 @@ import (
 	"github.com/victorjacobs/mealie-importer/internal/mealie"
 	"github.com/victorjacobs/mealie-importer/internal/mela"
 )
+
+var slugCleanup = regexp.MustCompile(`[^a-z0-9]+`)
 
 type config struct {
 	sourceDir   string
@@ -134,7 +137,7 @@ func run(ctx context.Context, cfg config) error {
 }
 
 func upsertRecipe(ctx context.Context, client *mealie.Client, recipe mealie.Recipe) (string, bool, error) {
-	existing, found, err := client.FindRecipeByName(ctx, recipe.Name)
+	existing, found, err := findExistingRecipe(ctx, client, recipe.Name)
 	if err != nil {
 		return "", false, err
 	}
@@ -150,12 +153,51 @@ func upsertRecipe(ctx context.Context, client *mealie.Client, recipe mealie.Reci
 
 	slug, err := client.CreateRecipe(ctx, recipe.Name)
 	if err != nil {
+		if mealie.IsAlreadyExists(err) {
+			return updateExistingAfterCreateConflict(ctx, client, recipe)
+		}
 		return "", false, err
 	}
 	if err := client.UpdateRecipe(ctx, slug, recipe); err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("update newly created recipe %q: %w", slug, err)
 	}
 	return slug, true, nil
+}
+
+func updateExistingAfterCreateConflict(ctx context.Context, client *mealie.Client, recipe mealie.Recipe) (string, bool, error) {
+	existing, found, err := findExistingRecipe(ctx, client, recipe.Name)
+	if err != nil {
+		return "", false, err
+	}
+	if !found {
+		return "", false, fmt.Errorf("recipe %q already exists, but lookup by name or slug could not find it", recipe.Name)
+	}
+	if existing.Slug == "" {
+		return "", false, fmt.Errorf("existing recipe %q has no slug", recipe.Name)
+	}
+	if err := client.UpdateRecipe(ctx, existing.Slug, recipe); err != nil {
+		return "", false, fmt.Errorf("update existing recipe %q after create conflict: %w", existing.Slug, err)
+	}
+	return existing.Slug, false, nil
+}
+
+func findExistingRecipe(ctx context.Context, client *mealie.Client, name string) (mealie.RecipeSummary, bool, error) {
+	existing, found, err := client.FindRecipeByName(ctx, name)
+	if err != nil || found {
+		return existing, found, err
+	}
+
+	slug := recipeSlug(name)
+	if slug == "" {
+		return mealie.RecipeSummary{}, false, nil
+	}
+	return client.FindRecipeBySlug(ctx, slug)
+}
+
+func recipeSlug(name string) string {
+	slug := strings.ToLower(strings.TrimSpace(name))
+	slug = slugCleanup.ReplaceAllString(slug, "-")
+	return strings.Trim(slug, "-")
 }
 
 func printDryRun(ctx context.Context, recipes []mela.Recipe, uploadImage bool) error {

@@ -91,6 +91,50 @@ func TestClientDoesNotFindPartialRecipeName(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestClientFindsRecipeBySlug(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "/api/recipes/test-recipe", r.URL.Path)
+		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+		_, _ = w.Write([]byte(`{"name":"Test Recipe","slug":"test-recipe"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(server.URL, "test-token")
+	require.NoError(t, err)
+
+	got, ok, err := client.FindRecipeBySlug(context.Background(), "test-recipe")
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, "Test Recipe", got.Name)
+	assert.Equal(t, "test-recipe", got.Slug)
+}
+
+func TestClientDoesNotFindMissingRecipeBySlug(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(server.URL, "test-token")
+	require.NoError(t, err)
+
+	_, ok, err := client.FindRecipeBySlug(context.Background(), "test-recipe")
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+func TestIsAlreadyExists(t *testing.T) {
+	err := &HTTPError{
+		StatusCode: http.StatusBadRequest,
+		Status:     "400 Bad Request",
+		Body:       `{"detail":{"message":"Recipe already exists"}}`,
+	}
+
+	assert.True(t, IsAlreadyExists(err))
+	assert.False(t, IsAlreadyExists(assert.AnError))
+}
+
 func TestClientUploadsRecipeImage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPut, r.Method)
