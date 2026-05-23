@@ -36,5 +36,7 @@ func TestConvert(t *testing.T) {
 	require.Len(t, got.RecipeInstructions, 3)
 	assert.Equal(t, "Simmer.", got.RecipeInstructions[1].Text)
 	require.Len(t, got.Notes, 2)
-	assert.Equal(t, true, got.Extras["mela_favorite"])
+	assert.Equal(t, "example", got.Extras["mela_id"])
+	assert.Equal(t, "true", got.Extras["mela_favorite"])
+	assert.Equal(t, "false", got.Extras["mela_want_to_cook"])
 }

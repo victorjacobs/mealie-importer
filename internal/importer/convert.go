@@ -22,8 +22,8 @@ func Convert(recipe mela.Recipe) mealie.Recipe {
 		DateAdded:   recipe.DateAdded(),
 		Extras: map[string]any{
 			"mela_id":           strings.TrimSpace(recipe.ID),
-			"mela_favorite":     recipe.Favorite,
-			"mela_want_to_cook": recipe.WantToCook,
+			"mela_favorite":     boolString(recipe.Favorite),
+			"mela_want_to_cook": boolString(recipe.WantToCook),
 		},
 	}
 
@@ -65,6 +65,13 @@ func Convert(recipe mela.Recipe) mealie.Recipe {
 	}
 
 	return out
+}
+
+func boolString(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
 }
 
 func slugify(input string) string {
