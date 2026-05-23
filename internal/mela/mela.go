@@ -35,9 +35,10 @@ type Recipe struct {
 }
 
 type Image struct {
-	Data      []byte
-	MediaType string
-	Extension string
+	Data          []byte
+	MediaType     string
+	Extension     string
+	ConvertedFrom string
 }
 
 func ReadFile(path string) (Recipe, error) {

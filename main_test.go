@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"io"
 	"os"
@@ -16,7 +17,7 @@ func TestPreviewImage(t *testing.T) {
 	image := base64.StdEncoding.EncodeToString([]byte{0xff, 0xd8, 0xff, 0x00})
 	recipe := mela.Recipe{Images: []string{image, image}}
 
-	preview, err := previewImage(recipe, true)
+	preview, err := previewImage(context.Background(), recipe, true)
 	require.NoError(t, err)
 	assert.True(t, preview.Enabled)
 	assert.True(t, preview.WillUpload)
@@ -28,7 +29,7 @@ func TestPreviewImage(t *testing.T) {
 }
 
 func TestPreviewImageDisabled(t *testing.T) {
-	preview, err := previewImage(mela.Recipe{Images: []string{"unused"}}, false)
+	preview, err := previewImage(context.Background(), mela.Recipe{Images: []string{"unused"}}, false)
 	require.NoError(t, err)
 	assert.False(t, preview.Enabled)
 	assert.False(t, preview.WillUpload)
@@ -53,7 +54,7 @@ func TestPrintDryRunIncludesImageUpload(t *testing.T) {
 		os.Stdout = oldStdout
 	})
 
-	require.NoError(t, printDryRun([]mela.Recipe{recipe}, true))
+	require.NoError(t, printDryRun(context.Background(), []mela.Recipe{recipe}, true))
 	require.NoError(t, write.Close())
 
 	output, err := io.ReadAll(read)
@@ -61,4 +62,41 @@ func TestPrintDryRunIncludesImageUpload(t *testing.T) {
 	assert.Contains(t, string(output), `"imageUpload"`)
 	assert.Contains(t, string(output), `"willUpload": true`)
 	assert.Contains(t, string(output), `"recipe"`)
+}
+
+func TestPrepareImageConvertsHEICToJPEG(t *testing.T) {
+	dir := t.TempDir()
+	converter := filepath.Join(dir, "heif-dec")
+	script := `#!/bin/sh
+set -eu
+out=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output)
+      out="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+printf '\377\330\377converted' > "$out"
+`
+	require.NoError(t, os.WriteFile(converter, []byte(script), 0o700))
+	t.Setenv("PATH", dir)
+
+	heic := base64.StdEncoding.EncodeToString([]byte{
+		0x00, 0x00, 0x00, 0x18,
+		'f', 't', 'y', 'p',
+		'h', 'e', 'i', 'c',
+	})
+
+	image, ok, err := prepareImage(context.Background(), mela.Recipe{Images: []string{heic}})
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, "image/jpeg", image.MediaType)
+	assert.Equal(t, "jpg", image.Extension)
+	assert.Equal(t, "heic", image.ConvertedFrom)
+	assert.Equal(t, []byte{0xff, 0xd8, 0xff, 'c', 'o', 'n', 'v', 'e', 'r', 't', 'e', 'd'}, image.Data)
 }

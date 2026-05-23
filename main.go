@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/victorjacobs/mealie-importer/internal/imageconv"
 	"github.com/victorjacobs/mealie-importer/internal/importer"
 	"github.com/victorjacobs/mealie-importer/internal/mealie"
 	"github.com/victorjacobs/mealie-importer/internal/mela"
@@ -35,6 +36,7 @@ type imagePreview struct {
 	MediaType     string `json:"mediaType,omitempty"`
 	Extension     string `json:"extension,omitempty"`
 	SizeBytes     int    `json:"sizeBytes,omitempty"`
+	ConvertedFrom string `json:"convertedFrom,omitempty"`
 	SkippedReason string `json:"skippedReason,omitempty"`
 }
 
@@ -97,7 +99,7 @@ func run(ctx context.Context, cfg config) error {
 	}
 
 	if cfg.dryRun {
-		return printDryRun(recipes, cfg.uploadImage)
+		return printDryRun(ctx, recipes, cfg.uploadImage)
 	}
 
 	client, err := mealie.NewClient(cfg.mealieURL, cfg.token)
@@ -118,7 +120,7 @@ func run(ctx context.Context, cfg config) error {
 		}
 
 		if cfg.uploadImage {
-			image, ok, err := recipe.PrimaryImage()
+			image, ok, err := prepareImage(ctx, recipe)
 			if err != nil {
 				return err
 			}
@@ -133,10 +135,10 @@ func run(ctx context.Context, cfg config) error {
 	return nil
 }
 
-func printDryRun(recipes []mela.Recipe, uploadImage bool) error {
+func printDryRun(ctx context.Context, recipes []mela.Recipe, uploadImage bool) error {
 	output := make([]dryRunRecipe, 0, len(recipes))
 	for _, recipe := range recipes {
-		image, err := previewImage(recipe, uploadImage)
+		image, err := previewImage(ctx, recipe, uploadImage)
 		if err != nil {
 			return err
 		}
@@ -152,7 +154,7 @@ func printDryRun(recipes []mela.Recipe, uploadImage bool) error {
 	return encoder.Encode(output)
 }
 
-func previewImage(recipe mela.Recipe, uploadImage bool) (imagePreview, error) {
+func previewImage(ctx context.Context, recipe mela.Recipe, uploadImage bool) (imagePreview, error) {
 	preview := imagePreview{
 		Enabled:    uploadImage,
 		ImageCount: len(recipe.Images),
@@ -162,7 +164,7 @@ func previewImage(recipe mela.Recipe, uploadImage bool) (imagePreview, error) {
 		return preview, nil
 	}
 
-	image, ok, err := recipe.PrimaryImage()
+	image, ok, err := prepareImage(ctx, recipe)
 	if err != nil {
 		return imagePreview{}, err
 	}
@@ -175,5 +177,29 @@ func previewImage(recipe mela.Recipe, uploadImage bool) (imagePreview, error) {
 	preview.MediaType = image.MediaType
 	preview.Extension = image.Extension
 	preview.SizeBytes = len(image.Data)
+	preview.ConvertedFrom = image.ConvertedFrom
 	return preview, nil
+}
+
+func prepareImage(ctx context.Context, recipe mela.Recipe) (mela.Image, bool, error) {
+	image, ok, err := recipe.PrimaryImage()
+	if err != nil || !ok {
+		return image, ok, err
+	}
+
+	if !imageconv.NeedsHEIFConversion(image.Extension) {
+		return image, true, nil
+	}
+
+	converted, err := imageconv.HEIFToJPEG(ctx, image.Data)
+	if err != nil {
+		return mela.Image{}, false, err
+	}
+
+	return mela.Image{
+		Data:          converted,
+		MediaType:     "image/jpeg",
+		Extension:     "jpg",
+		ConvertedFrom: image.Extension,
+	}, true, nil
 }

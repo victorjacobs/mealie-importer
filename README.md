@@ -39,12 +39,15 @@ Useful flags:
 - `--token`: Mealie API token, alternative to `MEALIE_TOKEN`
 - `--upload-image=false`: skip primary image upload
 
+HEIC/HEIF images are converted to JPEG before upload using `heif-dec` from the Nix development environment. The dry-run output reports these as `extension: "jpg"` with `convertedFrom: "heic"` or `convertedFrom: "heif"`.
+
 ## Current Import Strategy
 
 For each Mela recipe, the importer:
 
 1. Creates a Mealie recipe with `POST /api/recipes`.
 2. Updates the created recipe with converted fields using `PUT /api/recipes/{slug}`.
-3. Uploads the first embedded Mela image with `PUT /api/recipes/{slug}/image`.
+3. Converts HEIC/HEIF images to JPEG when needed.
+4. Uploads the first embedded Mela image with `PUT /api/recipes/{slug}/image`.
 
 Mela notes and nutrition text are preserved as Mealie notes. Mela IDs, favorite state, and want-to-cook state are preserved in recipe extras.
