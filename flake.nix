@@ -6,7 +6,7 @@
   };
 
   outputs =
-    { nixpkgs, ... }:
+    { self, nixpkgs, ... }:
     let
       systems = [
         "aarch64-darwin"
@@ -22,12 +22,35 @@
         system:
         let
           pkgs = import nixpkgs { inherit system; };
+          mealie-importer = pkgs.buildGoModule {
+            pname = "mealie-importer";
+            version = "0.1.0";
+            src = ./.;
+            vendorHash = "sha256-QIFGTWaBRCRItJOXkbXAziBDrVffuX/LEdNUvUQX4QY=";
+
+            nativeBuildInputs = [
+              pkgs.makeWrapper
+            ];
+
+            postInstall = ''
+              wrapProgram $out/bin/mealie-importer \
+                --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.libheif ]}
+            '';
+          };
         in
         {
-          default = pkgs.go_1_26;
+          default = mealie-importer;
+          inherit mealie-importer;
           go = pkgs.go_1_26;
         }
       );
+
+      apps = forAllSystems (system: {
+        default = {
+          type = "app";
+          program = "${self.packages.${system}.mealie-importer}/bin/mealie-importer";
+        };
+      });
 
       devShells = forAllSystems (
         system:
