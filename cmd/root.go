@@ -182,7 +182,22 @@ func updateExistingAfterCreateConflict(ctx context.Context, client *mealie.Clien
 }
 
 func updateRecipe(ctx context.Context, client *mealie.Client, slug string, recipe mealie.Recipe) error {
-	recipe.Slug = slug
+	current, found, err := client.GetRecipe(ctx, slug)
+	if err != nil {
+		return fmt.Errorf("get existing recipe %q before update: %w", slug, err)
+	}
+	if !found {
+		return fmt.Errorf("recipe %q was not found before update", slug)
+	}
+
+	recipe.ID = current.ID
+	recipe.UserID = current.UserID
+	recipe.HouseholdID = current.HouseholdID
+	recipe.GroupID = current.GroupID
+	recipe.Slug = current.Slug
+	if recipe.Slug == "" {
+		recipe.Slug = slug
+	}
 	return client.UpdateRecipe(ctx, slug, recipe)
 }
 

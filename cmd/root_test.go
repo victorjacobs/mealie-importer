@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -79,6 +80,8 @@ func TestUpsertRecipeUpdatesExistingRecipe(t *testing.T) {
 			created = true
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`"new-recipe"`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/recipes/test-recipe":
+			_, _ = w.Write([]byte(recipeResponse("recipe-id", "Test Recipe", "test-recipe")))
 		case r.Method == http.MethodPut && r.URL.Path == "/api/recipes/test-recipe":
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&updated))
 			w.WriteHeader(http.StatusOK)
@@ -99,19 +102,31 @@ func TestUpsertRecipeUpdatesExistingRecipe(t *testing.T) {
 	assert.Equal(t, "test-recipe", slug)
 	assert.Equal(t, "Test Recipe", updated.Name)
 	assert.Equal(t, "test-recipe", updated.Slug)
+	assert.Equal(t, "recipe-id", updated.ID)
+	assert.Equal(t, "user-id", updated.UserID)
+	assert.Equal(t, "household-id", updated.HouseholdID)
+	assert.Equal(t, "group-id", updated.GroupID)
 }
 
 func TestUpsertRecipeCreatesMissingRecipe(t *testing.T) {
 	var created mealie.CreateRecipe
 	var updated mealie.Recipe
+	var createAttempts int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/recipes":
 			_, _ = w.Write([]byte(`{"items":[]}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/recipes":
+			createAttempts++
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&created))
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`"new-recipe"`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/recipes/new-recipe":
+			if createAttempts == 0 {
+				http.NotFound(w, r)
+				return
+			}
+			_, _ = w.Write([]byte(recipeResponse("new-id", "New Recipe", "new-recipe")))
 		case r.Method == http.MethodPut && r.URL.Path == "/api/recipes/new-recipe":
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&updated))
 			w.WriteHeader(http.StatusOK)
@@ -132,6 +147,7 @@ func TestUpsertRecipeCreatesMissingRecipe(t *testing.T) {
 	assert.Equal(t, "New Recipe", created.Name)
 	assert.Equal(t, "New Recipe", updated.Name)
 	assert.Equal(t, "new-recipe", updated.Slug)
+	assert.Equal(t, "new-id", updated.ID)
 }
 
 func TestUpsertRecipeUpdatesExistingStubBySlug(t *testing.T) {
@@ -146,7 +162,7 @@ func TestUpsertRecipeUpdatesExistingStubBySlug(t *testing.T) {
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`"new-recipe"`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/recipes/test-recipe":
-			_, _ = w.Write([]byte(`{"name":"Test Recipe","slug":"test-recipe"}`))
+			_, _ = w.Write([]byte(recipeResponse("stub-id", "Test Recipe", "test-recipe")))
 		case r.Method == http.MethodPut && r.URL.Path == "/api/recipes/test-recipe":
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&updated))
 			w.WriteHeader(http.StatusOK)
@@ -167,6 +183,7 @@ func TestUpsertRecipeUpdatesExistingStubBySlug(t *testing.T) {
 	assert.Equal(t, "test-recipe", slug)
 	assert.Equal(t, "Test Recipe", updated.Name)
 	assert.Equal(t, "test-recipe", updated.Slug)
+	assert.Equal(t, "stub-id", updated.ID)
 }
 
 func TestUpsertRecipeRecoversExistingStubAfterCreateConflict(t *testing.T) {
@@ -183,7 +200,7 @@ func TestUpsertRecipeRecoversExistingStubAfterCreateConflict(t *testing.T) {
 				http.NotFound(w, r)
 				return
 			}
-			_, _ = w.Write([]byte(`{"name":"Test Recipe","slug":"test-recipe"}`))
+			_, _ = w.Write([]byte(recipeResponse("stub-id", "Test Recipe", "test-recipe")))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/recipes":
 			createAttempts++
 			w.WriteHeader(http.StatusBadRequest)
@@ -205,10 +222,22 @@ func TestUpsertRecipeRecoversExistingStubAfterCreateConflict(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, wasCreated)
 	assert.Equal(t, 1, createAttempts)
-	assert.Equal(t, 2, slugLookups)
+	assert.Equal(t, 3, slugLookups)
 	assert.Equal(t, "test-recipe", slug)
 	assert.Equal(t, "Test Recipe", updated.Name)
 	assert.Equal(t, "test-recipe", updated.Slug)
+	assert.Equal(t, "stub-id", updated.ID)
+}
+
+func recipeResponse(id, name, slug string) string {
+	return fmt.Sprintf(`{
+		"id": %q,
+		"userId": "user-id",
+		"householdId": "household-id",
+		"groupId": "group-id",
+		"name": %q,
+		"slug": %q
+	}`, id, name, slug)
 }
 
 func TestPrepareImageConvertsHEICToJPEG(t *testing.T) {

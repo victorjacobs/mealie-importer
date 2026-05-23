@@ -98,19 +98,27 @@ func (c *Client) FindRecipeByName(ctx context.Context, name string) (RecipeSumma
 }
 
 func (c *Client) FindRecipeBySlug(ctx context.Context, slug string) (RecipeSummary, bool, error) {
+	recipe, found, err := c.GetRecipe(ctx, slug)
+	if err != nil || !found {
+		return RecipeSummary{}, false, err
+	}
+	return RecipeSummary{Name: recipe.Name, Slug: recipe.Slug}, true, nil
+}
+
+func (c *Client) GetRecipe(ctx context.Context, slug string) (Recipe, bool, error) {
 	var recipe Recipe
 	err := c.doJSON(ctx, http.MethodGet, "/api/recipes/"+url.PathEscape(slug), nil, &recipe)
 	if err != nil {
 		var httpErr *HTTPError
 		if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
-			return RecipeSummary{}, false, nil
+			return Recipe{}, false, nil
 		}
-		return RecipeSummary{}, false, err
+		return Recipe{}, false, err
 	}
 	if recipe.Slug == "" {
 		recipe.Slug = slug
 	}
-	return RecipeSummary{Name: recipe.Name, Slug: recipe.Slug}, true, nil
+	return recipe, true, nil
 }
 
 func (c *Client) UpdateRecipe(ctx context.Context, slug string, recipe Recipe) error {

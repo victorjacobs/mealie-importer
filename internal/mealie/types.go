@@ -14,6 +14,10 @@ type RecipeSummary struct {
 }
 
 type Recipe struct {
+	ID                 string             `json:"id,omitempty"`
+	UserID             string             `json:"userId,omitempty"`
+	HouseholdID        string             `json:"householdId,omitempty"`
+	GroupID            string             `json:"groupId,omitempty"`
 	Slug               string             `json:"slug,omitempty"`
 	Name               string             `json:"name,omitempty"`
 	RecipeYield        string             `json:"recipeYield,omitempty"`
