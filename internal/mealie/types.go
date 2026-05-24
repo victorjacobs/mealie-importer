@@ -4,6 +4,10 @@ type CreateRecipe struct {
 	Name string `json:"name"`
 }
 
+type CreateCategory struct {
+	Name string `json:"name"`
+}
+
 type RecipeSearchResults struct {
 	Items []RecipeSummary `json:"items"`
 }

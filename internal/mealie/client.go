@@ -156,6 +156,15 @@ func (c *Client) ListCategories(ctx context.Context) ([]Organizer, error) {
 	return categories, nil
 }
 
+func (c *Client) CreateCategory(ctx context.Context, name string) error {
+	c.logger.Debug("creating category", zap.String("name", name))
+	if err := c.doJSON(ctx, http.MethodPost, "/api/organizers/categories", CreateCategory{Name: name}, nil); err != nil {
+		return err
+	}
+	c.logger.Debug("created category", zap.String("name", name))
+	return nil
+}
+
 func (c *Client) GetRecipe(ctx context.Context, slug string) (Recipe, bool, error) {
 	c.logger.Debug("getting recipe", zap.String("slug", slug))
 	var recipe Recipe

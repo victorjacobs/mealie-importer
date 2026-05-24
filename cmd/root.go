@@ -161,21 +161,43 @@ func loadCategoryIndex(ctx context.Context, client *mealie.Client, recipes []mel
 		return nil, nil
 	}
 
+	wanted := wantedCategoryNames(recipes)
 	categories, err := client.ListCategories(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list mealie categories: %w", err)
 	}
 
-	index := make(map[string]mealie.Organizer, len(categories))
-	for _, category := range categories {
-		key := categoryKey(category.Name)
-		if key == "" {
+	index, err := categoryIndex(categories)
+	if err != nil {
+		return nil, err
+	}
+	created := false
+	for key, name := range wanted {
+		if _, ok := index[key]; ok {
 			continue
 		}
-		if existing, ok := index[key]; ok && existing.ID != category.ID {
-			return nil, fmt.Errorf("multiple mealie categories named %q", category.Name)
+		logger.Debug("creating missing mealie category", zap.String("name", name))
+		if err := client.CreateCategory(ctx, name); err != nil {
+			return nil, fmt.Errorf("create mealie category %q: %w", name, err)
 		}
-		index[key] = category
+		created = true
+	}
+	if !created {
+		return index, nil
+	}
+
+	categories, err = client.ListCategories(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list mealie categories after create: %w", err)
+	}
+	index, err = categoryIndex(categories)
+	if err != nil {
+		return nil, err
+	}
+	for key, name := range wanted {
+		if category, ok := index[key]; !ok || category.ID == "" {
+			return nil, fmt.Errorf("created mealie category %q, but it was not returned by the category list", name)
+		}
 	}
 	return index, nil
 }
@@ -189,6 +211,38 @@ func usesCategories(recipes []mela.Recipe) bool {
 		}
 	}
 	return false
+}
+
+func wantedCategoryNames(recipes []mela.Recipe) map[string]string {
+	wanted := make(map[string]string)
+	for _, recipe := range recipes {
+		for _, category := range recipe.Categories {
+			name := strings.TrimSpace(category)
+			key := categoryKey(name)
+			if key == "" {
+				continue
+			}
+			if _, ok := wanted[key]; !ok {
+				wanted[key] = name
+			}
+		}
+	}
+	return wanted
+}
+
+func categoryIndex(categories []mealie.Organizer) (map[string]mealie.Organizer, error) {
+	index := make(map[string]mealie.Organizer, len(categories))
+	for _, category := range categories {
+		key := categoryKey(category.Name)
+		if key == "" {
+			continue
+		}
+		if existing, ok := index[key]; ok && existing.ID != category.ID {
+			return nil, fmt.Errorf("multiple mealie categories named %q", category.Name)
+		}
+		index[key] = category
+	}
+	return index, nil
 }
 
 func resolveRecipeCategories(recipe *mealie.Recipe, categories map[string]mealie.Organizer) error {

@@ -170,6 +170,26 @@ func TestClientListsCategories(t *testing.T) {
 	assert.Equal(t, "category-2", categories[1].ID)
 }
 
+func TestClientCreatesCategory(t *testing.T) {
+	var created CreateCategory
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/api/organizers/categories", r.URL.Path)
+		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&created))
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(server.URL, "test-token")
+	require.NoError(t, err)
+
+	err = client.CreateCategory(context.Background(), "Pasta")
+	require.NoError(t, err)
+	assert.Equal(t, "Pasta", created.Name)
+}
+
 func TestIsAlreadyExists(t *testing.T) {
 	err := &HTTPError{
 		StatusCode: http.StatusBadRequest,
