@@ -8,6 +8,12 @@ type RecipeSearchResults struct {
 	Items []RecipeSummary `json:"items"`
 }
 
+type CategoryResults struct {
+	Items      []Organizer `json:"items"`
+	Page       int         `json:"page"`
+	TotalPages int         `json:"total_pages"`
+}
+
 type RecipeSummary struct {
 	Name string `json:"name"`
 	Slug string `json:"slug"`
@@ -36,8 +42,10 @@ type Recipe struct {
 }
 
 type Organizer struct {
-	Name string `json:"name"`
-	Slug string `json:"slug"`
+	ID      string `json:"id,omitempty"`
+	GroupID string `json:"groupId,omitempty"`
+	Name    string `json:"name"`
+	Slug    string `json:"slug"`
 }
 
 type RecipeIngredient struct {

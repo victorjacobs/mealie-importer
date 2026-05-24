@@ -124,6 +124,52 @@ func TestClientDoesNotFindMissingRecipeBySlug(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestClientListsCategories(t *testing.T) {
+	var pages []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "/api/organizers/categories", r.URL.Path)
+		assert.Equal(t, "200", r.URL.Query().Get("perPage"))
+		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+		pages = append(pages, r.URL.Query().Get("page"))
+
+		switch r.URL.Query().Get("page") {
+		case "1":
+			_, _ = w.Write([]byte(`{
+				"page": 1,
+				"total_pages": 2,
+				"items": [
+					{"id": "category-1", "groupId": "group-1", "name": "Dinner", "slug": "dinner"}
+				]
+			}`))
+		case "2":
+			_, _ = w.Write([]byte(`{
+				"page": 2,
+				"total_pages": 2,
+				"items": [
+					{"id": "category-2", "groupId": "group-1", "name": "Dessert", "slug": "dessert"}
+				]
+			}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(server.URL, "test-token")
+	require.NoError(t, err)
+
+	categories, err := client.ListCategories(context.Background())
+	require.NoError(t, err)
+	require.Len(t, categories, 2)
+	assert.Equal(t, []string{"1", "2"}, pages)
+	assert.Equal(t, "category-1", categories[0].ID)
+	assert.Equal(t, "Dinner", categories[0].Name)
+	assert.Equal(t, "dinner", categories[0].Slug)
+	assert.Equal(t, "group-1", categories[0].GroupID)
+	assert.Equal(t, "category-2", categories[1].ID)
+}
+
 func TestIsAlreadyExists(t *testing.T) {
 	err := &HTTPError{
 		StatusCode: http.StatusBadRequest,

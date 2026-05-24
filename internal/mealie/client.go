@@ -129,9 +129,37 @@ func (c *Client) FindRecipeBySlug(ctx context.Context, slug string) (RecipeSumma
 	return RecipeSummary{Name: recipe.Name, Slug: recipe.Slug}, true, nil
 }
 
+func (c *Client) ListCategories(ctx context.Context) ([]Organizer, error) {
+	c.logger.Debug("listing categories")
+	var categories []Organizer
+	for page := 1; ; page++ {
+		endpoint := c.endpoint("/api/organizers/categories")
+		parsed, err := url.Parse(endpoint)
+		if err != nil {
+			return nil, err
+		}
+		query := parsed.Query()
+		query.Set("page", fmt.Sprint(page))
+		query.Set("perPage", "200")
+		parsed.RawQuery = query.Encode()
+
+		var results CategoryResults
+		if err := c.doJSONURL(ctx, http.MethodGet, parsed.String(), nil, &results); err != nil {
+			return nil, err
+		}
+		categories = append(categories, results.Items...)
+		if results.TotalPages == 0 || page >= results.TotalPages {
+			break
+		}
+	}
+	c.logger.Debug("listed categories", zap.Int("count", len(categories)))
+	return categories, nil
+}
+
 func (c *Client) GetRecipe(ctx context.Context, slug string) (Recipe, bool, error) {
 	c.logger.Debug("getting recipe", zap.String("slug", slug))
 	var recipe Recipe
+
 	err := c.doJSON(ctx, http.MethodGet, "/api/recipes/"+url.PathEscape(slug), nil, &recipe)
 	if err != nil {
 		var httpErr *HTTPError
@@ -139,17 +167,22 @@ func (c *Client) GetRecipe(ctx context.Context, slug string) (Recipe, bool, erro
 			c.logger.Debug("recipe not found", zap.String("slug", slug))
 			return Recipe{}, false, nil
 		}
+
 		return Recipe{}, false, err
 	}
+
 	if recipe.Slug == "" {
 		recipe.Slug = slug
 	}
+
 	c.logger.Debug("got recipe", zap.String("slug", slug), zap.String("id", recipe.ID), zap.String("name", recipe.Name), zap.String("recipeSlug", recipe.Slug))
+
 	return recipe, true, nil
 }
 
 func (c *Client) UpdateRecipe(ctx context.Context, slug string, recipe Recipe) error {
 	c.logger.Debug("updating recipe", zap.String("slug", slug), zap.Any("recipe", recipe))
+
 	return c.doJSON(ctx, http.MethodPut, "/api/recipes/"+url.PathEscape(slug), recipe, nil)
 }
 

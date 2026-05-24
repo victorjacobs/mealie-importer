@@ -115,9 +115,16 @@ func run(ctx context.Context, cfg config) error {
 	if err != nil {
 		return err
 	}
+	categoryIndex, err := loadCategoryIndex(ctx, client, recipes)
+	if err != nil {
+		return err
+	}
 
 	for i, recipe := range recipes {
 		converted := importer.Convert(recipe)
+		if err := resolveRecipeCategories(&converted, categoryIndex); err != nil {
+			return fmt.Errorf("%s: resolve categories: %w", recipe.Path, err)
+		}
 		logger.Debug("processing recipe", zap.Int("index", i+1), zap.Int("total", len(recipes)), zap.String("path", recipe.Path), zap.String("name", converted.Name), zap.Int("ingredients", len(converted.RecipeIngredient)), zap.Int("steps", len(converted.RecipeInstructions)), zap.Int("notes", len(converted.Notes)), zap.Int("images", len(recipe.Images)))
 
 		slug, created, err := upsertRecipe(ctx, client, converted)
@@ -147,6 +154,71 @@ func run(ctx context.Context, cfg config) error {
 	}
 
 	return nil
+}
+
+func loadCategoryIndex(ctx context.Context, client *mealie.Client, recipes []mela.Recipe) (map[string]mealie.Organizer, error) {
+	if !usesCategories(recipes) {
+		return nil, nil
+	}
+
+	categories, err := client.ListCategories(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list mealie categories: %w", err)
+	}
+
+	index := make(map[string]mealie.Organizer, len(categories))
+	for _, category := range categories {
+		key := categoryKey(category.Name)
+		if key == "" {
+			continue
+		}
+		if existing, ok := index[key]; ok && existing.ID != category.ID {
+			return nil, fmt.Errorf("multiple mealie categories named %q", category.Name)
+		}
+		index[key] = category
+	}
+	return index, nil
+}
+
+func usesCategories(recipes []mela.Recipe) bool {
+	for _, recipe := range recipes {
+		for _, category := range recipe.Categories {
+			if strings.TrimSpace(category) != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func resolveRecipeCategories(recipe *mealie.Recipe, categories map[string]mealie.Organizer) error {
+	if len(recipe.RecipeCategory) == 0 {
+		return nil
+	}
+	if categories == nil {
+		return fmt.Errorf("recipe has categories but mealie categories were not loaded")
+	}
+
+	resolved := make([]mealie.Organizer, 0, len(recipe.RecipeCategory))
+	seen := make(map[string]struct{}, len(recipe.RecipeCategory))
+	for _, category := range recipe.RecipeCategory {
+		key := categoryKey(category.Name)
+		existing, ok := categories[key]
+		if !ok || existing.ID == "" {
+			return fmt.Errorf("category %q does not exist in mealie", category.Name)
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		resolved = append(resolved, existing)
+	}
+	recipe.RecipeCategory = resolved
+	return nil
+}
+
+func categoryKey(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
 }
 
 func upsertRecipe(ctx context.Context, client *mealie.Client, recipe mealie.Recipe) (string, bool, error) {
@@ -216,7 +288,9 @@ func updateRecipe(ctx context.Context, client *mealie.Client, slug string, recip
 	if recipe.Slug == "" {
 		recipe.Slug = slug
 	}
+
 	logger.Debug("sending recipe update", zap.String("slug", slug), zap.String("id", recipe.ID), zap.String("name", recipe.Name), zap.String("payloadSlug", recipe.Slug), zap.String("userId", recipe.UserID), zap.String("householdId", recipe.HouseholdID), zap.String("groupId", recipe.GroupID), zap.Int("ingredients", len(recipe.RecipeIngredient)), zap.Int("steps", len(recipe.RecipeInstructions)), zap.Int("notes", len(recipe.Notes)))
+
 	return client.UpdateRecipe(ctx, slug, recipe)
 }
 

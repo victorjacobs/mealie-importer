@@ -229,6 +229,100 @@ func TestUpsertRecipeRecoversExistingStubAfterCreateConflict(t *testing.T) {
 	assert.Equal(t, "stub-id", updated.ID)
 }
 
+func TestResolveRecipeCategoriesUsesExistingMealieIDs(t *testing.T) {
+	recipe := mealie.Recipe{
+		Name: "Test Recipe",
+		RecipeCategory: []mealie.Organizer{
+			{Name: " Dinner Ideas ", Slug: "dinner-ideas"},
+			{Name: "dinner ideas", Slug: "dinner-ideas"},
+		},
+	}
+
+	err := resolveRecipeCategories(&recipe, map[string]mealie.Organizer{
+		"dinner ideas": {
+			ID:      "category-id",
+			GroupID: "group-id",
+			Name:    "Dinner Ideas",
+			Slug:    "dinner-ideas",
+		},
+	})
+	require.NoError(t, err)
+
+	require.Len(t, recipe.RecipeCategory, 1)
+	assert.Equal(t, "category-id", recipe.RecipeCategory[0].ID)
+	assert.Equal(t, "Dinner Ideas", recipe.RecipeCategory[0].Name)
+	assert.Equal(t, "dinner-ideas", recipe.RecipeCategory[0].Slug)
+}
+
+func TestResolveRecipeCategoriesRequiresExistingMealieCategory(t *testing.T) {
+	recipe := mealie.Recipe{
+		Name:           "Test Recipe",
+		RecipeCategory: []mealie.Organizer{{Name: "Missing Category", Slug: "missing-category"}},
+	}
+
+	err := resolveRecipeCategories(&recipe, map[string]mealie.Organizer{})
+	assert.ErrorContains(t, err, `category "Missing Category" does not exist in mealie`)
+}
+
+func TestRunFetchesCategoriesBeforeUpdatingRecipes(t *testing.T) {
+	dir := t.TempDir()
+	recipePath := filepath.Join(dir, "recipe.melarecipe")
+	data, err := json.Marshal(mela.Recipe{
+		Title:      "Test Recipe",
+		Categories: []string{"Dinner Ideas"},
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(recipePath, data, 0o600))
+
+	var listedCategories bool
+	var updated mealie.Recipe
+	var created bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/organizers/categories":
+			listedCategories = true
+			_, _ = w.Write([]byte(`{
+				"page": 1,
+				"total_pages": 1,
+				"items": [
+					{"id": "category-id", "groupId": "group-id", "name": "Dinner Ideas", "slug": "dinner-ideas"}
+				]
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/recipes":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/recipes/test-recipe":
+			if !created {
+				http.NotFound(w, r)
+				return
+			}
+			_, _ = w.Write([]byte(recipeResponse("recipe-id", "Test Recipe", "test-recipe")))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/recipes":
+			created = true
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`"test-recipe"`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/recipes/test-recipe":
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&updated))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	err = run(context.Background(), config{
+		sourceDir:   dir,
+		mealieURL:   server.URL,
+		token:       "test-token",
+		uploadImage: false,
+	})
+	require.NoError(t, err)
+	assert.True(t, listedCategories)
+	require.Len(t, updated.RecipeCategory, 1)
+	assert.Equal(t, "category-id", updated.RecipeCategory[0].ID)
+	assert.Equal(t, "Dinner Ideas", updated.RecipeCategory[0].Name)
+}
+
 func recipeResponse(id, name, slug string) string {
 	return fmt.Sprintf(`{
 		"id": %q,
